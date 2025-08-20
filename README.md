@@ -58,3 +58,4 @@ gnome-extensions enable kbd-backlight@flightmansam
 I have only tested this with the following devices:
 - 16" M1 Pro running Asahi Fedora Remix 42 (Gnome 48)
 - 11" 2015 MacBook Air running Fedora 42 (Gnome 48)
+- brightnessctl ver. 0.5
