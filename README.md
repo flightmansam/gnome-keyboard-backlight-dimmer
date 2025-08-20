@@ -1,3 +1,5 @@
+# Keyboard Backlight Idle
+
 A GNOME Shell extension that automatically dims and restores your laptop keyboard backlight when the system is idle. I actually can't believe this isn't already out there but to the best I can find, it isn't! It is modelled after the backlight brightness transistions of built in apple keyboards (sorry macbook haters!), that is, 1s fade out and 0.5s fade in. It uses IdleMonitor for responsiveness, and falls back to user input detection when the session is inhibited (such as during video playback or caffeine).
 
 
