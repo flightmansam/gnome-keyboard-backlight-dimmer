@@ -158,34 +158,50 @@ export default class KbdBacklightIdle extends Extension {
         this._resetWatchId = null;
     }
 
-    if (this._sessionInhibitActive) {
-        log("kbd-backlight: using fallback mode");
-        this._fallbackTimeoutId = GLib.timeout_add_seconds(
-            GLib.PRIORITY_DEFAULT,
-            this._timeoutSec,
-            () => {
-                this._brightnessOn = this._getWidgetSliderValue() ?? 60;
-                this._checked = this._getWidgetSliderChecked() ?? true
+   if (this._sessionInhibitActive) {
+    log("kbd-backlight: using fallback mode");
 
-                if (this._checked) {
-                    this._animateToPercent(this._brightnessOn, this._brightnessOff, this._fadeOutTime);
-                    // ensure only one reset watch exists
-                    if (this._resetWatchId)
-                        this._idleMonitor.remove_watch(this._resetWatchId);
+    // Clear any previous checker
+    if (this._fallbackTimeoutId) {
+        GLib.source_remove(this._fallbackTimeoutId);
+        this._fallbackTimeoutId = null;
+    }
 
-                    this._resetWatchId = this._idleMonitor.add_user_active_watch(() => {
-                        this._animateToPercent(this._brightnessOff, this._brightnessOn, this._fadeInTime);
-                        // after restore, re-arm the idle logic for the next cycle
-                        this._setupIdleWatch();
-                    });
-                }
-                
-                // one-shot fallback; we’ll re-arm on restore or inhibitor change
-                this._fallbackTimeoutId = null;
-                return GLib.SOURCE_REMOVE;
-            }
-        );
-    } else {
+    // Check every 1000 ms until we've truly been idle for timeoutSec
+    const CHECK_MS = 1000;
+
+    this._fallbackTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, CHECK_MS, () => {
+        this._brightnessOn = this._getWidgetSliderValue() ?? 60;
+        this._checked      = this._getWidgetSliderChecked() ?? true;
+
+        if (!this._checked) return GLib.SOURCE_CONTINUE; // switch is off; keep waiting
+
+        const idleMs = this._idleMonitor.get_idletime();
+        if (idleMs < this._timeoutSec * 1000) {
+            // User has interacted recently; do not dim yet.
+            return GLib.SOURCE_CONTINUE;
+        }
+
+        // We've been idle long enough → dim now, then arm user_active_watch to restore.
+        this._animateToPercent(this._brightnessOn, this._brightnessOff, this._fadeOutTime);
+
+        // Ensure only one reset watch exists
+        if (this._resetWatchId) {
+            try { this._idleMonitor.remove_watch(this._resetWatchId); } catch {}
+            this._resetWatchId = null;
+        }
+
+        this._resetWatchId = this._idleMonitor.add_user_active_watch(() => {
+            this._animateToPercent(this._brightnessOff, this._brightnessOn, this._fadeInTime);
+            // Re-arm for the next cycle
+            this._setupIdleWatch();
+        });
+
+        // Stop the checker until we re-arm on activity or inhibitor change
+        this._fallbackTimeoutId = null;
+        return GLib.SOURCE_REMOVE;
+    });
+}  else {
         // Normal path: real idle monitor
         log("kbd-backlight: using IdleMonitor mode");
         this._idleWatchId = this._idleMonitor.add_idle_watch(
