@@ -17,6 +17,7 @@ gnome-extensions enable kbd-backlight@flightmansam
 - [ ] Preferences menu for idle timeout, ~~brightness values~~, and fade times.
 - [x] Integration with GNOME Quick Settings keyboard brightness toggle.
 - [x] Support for laptops with different `kbd_backlight` device (e.g. Dell and others?).
+- [ ] Bug where if login after sleep (and inevitably the keyboard has been dimmed) the set brightness is too low (1%)
 - [ ] Non-linear transtion curves (surely Craig Federighi would have used something sexy like that in macOS)
 - [ ] Add to GNOME Extensions repo
 
