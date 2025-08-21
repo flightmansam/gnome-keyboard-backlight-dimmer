@@ -4,6 +4,6 @@
   "description": "Turns off the keyboard backlight after a period of inactivity and restores it on activity.",
   "shell-version": ["48"],
   "url": "https://github.com/flightmansam/gnome-keyboard-backlight-dimmer",
-  "version": 1,
+  "version": 2,
   "settings-schema": "org.gnome.shell.extensions.kbd-backlight"
 }
