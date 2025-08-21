@@ -20,6 +20,16 @@ const Login1ProxyBus = Gio.DBusProxy.new_for_bus_sync(
             null
         );
 
+const ScreenSaverProxyBus = Gio.DBusProxy.new_for_bus_sync(
+    Gio.BusType.SESSION,
+    Gio.DBusProxyFlags.NONE,
+    null,
+    'org.gnome.ScreenSaver',
+    '/org/gnome/ScreenSaver',
+    'org.gnome.ScreenSaver',
+    null
+);
+
 export default class KbdBacklightIdle extends Extension {
     enable() {
 
@@ -27,13 +37,15 @@ export default class KbdBacklightIdle extends Extension {
 
         this._timeoutSec = 6;
         this._brightnessOn = this._getWidgetSliderValue() ?? 60
+        this._brightnessOff = 1
+        this._fadeOutTime = 1000
+        this._fadeInTime = 500
         this._checked = this._getWidgetSliderChecked() ?? true
         this._idleMonitor = global.backend.get_core_idle_monitor()
         this._sessionInhibitActive = false;
 
         this._idleWatchId = null;
         this._resetWatchId = null;
-        this._eventSignalId = null;
         this._fallbackTimeoutId = null;
 
         this._brightnessProxy = new BrightnessProxy(Gio.DBus.session, BUS_NAME, OBJECT_PATH,
@@ -49,6 +61,21 @@ export default class KbdBacklightIdle extends Extension {
             () => {
                 this._checkInhibitors();
                 return GLib.SOURCE_CONTINUE;
+            }
+        );
+
+        this._screensaverSigId = ScreenSaverProxyBus.connectSignal(
+            'ActiveChanged',
+            (_proxy, _sender, [active]) => {
+                log(`kbd-backlight: ActiveChanged Signal`);
+                if (!active) {
+                    // unlocked
+                    log(`kbd-backlight: unlocked`);
+                    this._animateToPercent(this._brightnessOff, this._brightnessOn, this._fadeInTime);
+                    this._setupIdleWatch();
+                } else {
+                    log(`kbd-backlight: locked`);
+                }
             }
         );
 
@@ -75,11 +102,14 @@ export default class KbdBacklightIdle extends Extension {
         if (this._animSourceId) {
             GLib.source_remove(this._animSourceId);
         }
+        if (this._screensaverSigId) {
+            ScreenSaverProxyBus.disconnectSignal(this._screensaverSigId); 
+            this._screensaverSigId = null;
+        }
 
         this._idleMonitor = null;
         this._idleWatchId = null;
         this._resetWatchId = null;
-        this._eventSignalId = null;
         this._fallbackTimeoutId = null;
         this._inhibitorCheckId = null;
         this._animSourceId = null;
@@ -138,13 +168,13 @@ export default class KbdBacklightIdle extends Extension {
                 this._checked = this._getWidgetSliderChecked() ?? true
 
                 if (this._checked) {
-                    this._animateToPercent(this._brightnessOn, 1, 1000);
+                    this._animateToPercent(this._brightnessOn, this._brightnessOff, this._fadeOutTime);
                     // ensure only one reset watch exists
                     if (this._resetWatchId)
                         this._idleMonitor.remove_watch(this._resetWatchId);
 
                     this._resetWatchId = this._idleMonitor.add_user_active_watch(() => {
-                        this._animateToPercent(1, this._brightnessOn, 500);
+                        this._animateToPercent(this._brightnessOff, this._brightnessOn, this._fadeInTime);
                         // after restore, re-arm the idle logic for the next cycle
                         this._setupIdleWatch();
                     });
@@ -165,10 +195,10 @@ export default class KbdBacklightIdle extends Extension {
                 this._checked = this._getWidgetSliderChecked() ?? true
 
                 if (this._checked) {
-                    this._animateToPercent(this._brightnessOn, 1, 1000)
+                    this._animateToPercent(this._brightnessOn, this._brightnessOff, this._fadeOutTime)
 
                     this._resetWatchId = this._idleMonitor.add_user_active_watch(() => {
-                        this._animateToPercent(1, this._brightnessOn, 500)
+                        this._animateToPercent(this._brightnessOff, this._brightnessOn, this._fadeInTime)
                     });
                 }
                 
@@ -179,7 +209,7 @@ export default class KbdBacklightIdle extends Extension {
 
     _setBrightness(value) {
         try {
-            if (this._brightnessProxy && this._brightnessProxy.Brightness) {
+            if (this._brightnessProxy && this._brightnessProxy.Brightness !== undefined) {
                 this._brightnessProxy.Brightness = value
             }
         } catch (e) {
@@ -189,11 +219,11 @@ export default class KbdBacklightIdle extends Extension {
 
     _getBrightness() {
         try {
-            if (this._brightnessProxy && this._brightnessProxy.Brightness) {
+            if (this._brightnessProxy && this._brightnessProxy.Brightness !== undefined) {
                 return this._brightnessProxy.Brightness
             }
         } catch (e) {
-            log(`kbd-backlight: failed to set brightness: ${e.message}`);
+            log(`kbd-backlight: failed to get brightness: ${e.message}`);
         }
         return null
     }    
